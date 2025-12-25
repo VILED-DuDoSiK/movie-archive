@@ -27,6 +27,7 @@ async function fetchWithTimeout(url, timeout = 10000) {
 }
 
 async function fetchMoviesByKeywords(keywords) {
+  console.log('fetchMoviesByKeywords called with:', keywords);
   const movies = [];
   
   for (const keyword of keywords) {
@@ -40,23 +41,33 @@ async function fetchMoviesByKeywords(keywords) {
       
       if (data && data.Search && Array.isArray(data.Search)) {
         movies.push(...data.Search);
+        console.log('Movies added for', keyword, ':', data.Search.length);
       }
     } catch (e) {
       console.error(`Error fetching ${keyword}:`, e);
     }
   }
   
-  return [...new Map(movies.map(m => [m.imdbID, m])).values()];
+  console.log('Total movies before dedup:', movies.length);
+  const uniqueMovies = [...new Map(movies.map(m => [m.imdbID, m])).values()];
+  console.log('Total movies after dedup:', uniqueMovies.length);
+  return uniqueMovies;
 }
 
 async function fetchPopularMovies() {
+  console.log('fetchPopularMovies called');
   const queries = ['avengers', 'star', 'war', 'love', 'dark'];
-  return await fetchMoviesByKeywords(queries);
+  const result = await fetchMoviesByKeywords(queries);
+  console.log('fetchPopularMovies returning:', result.length, 'movies');
+  return result;
 }
 
 async function fetchTopMovies() {
+  console.log('fetchTopMovies called');
   const queries = ['godfather', 'shawshank', 'inception', 'matrix'];
-  return await fetchMoviesByKeywords(queries);
+  const result = await fetchMoviesByKeywords(queries);
+  console.log('fetchTopMovies returning:', result.length, 'movies');
+  return result;
 }
 
 async function searchMovies(query, page = 1) {
@@ -154,15 +165,18 @@ function createMovieCard(movie) {
 }
 
 async function loadMovies() {
+  console.log('loadMovies called, category:', currentCategory);
+  
   if (isLoading) return;
   
   isLoading = true;
   moviesGrid.innerHTML = '<div class="loading">Загрузка</div>';
 
   try {
-    let movies = [];
+    let movies;
     
     if (currentCategory === 'favorites') {
+      console.log('Loading favorites');
       movies = getFavorites() || [];
       if (movies.length === 0) {
         moviesGrid.innerHTML = '<div class="error">Нет избранных фильмов</div>';
@@ -170,23 +184,30 @@ async function loadMovies() {
         return;
       }
     } else if (searchQuery) {
+      console.log('Searching for:', searchQuery);
       const data = await searchMovies(searchQuery, currentPage);
       movies = data.Search || [];
     } else if (currentCategory === 'popular') {
+      console.log('Loading popular movies');
       movies = await fetchPopularMovies();
+      console.log('Popular movies result:', movies);
     } else if (currentCategory === 'top') {
+      console.log('Loading top movies');
       movies = await fetchTopMovies();
+      console.log('Top movies result:', movies);
     }
 
-    console.log('Movies loaded:', movies.length, movies);
+    console.log('Final movies variable:', movies, 'Type:', typeof movies, 'Is array:', Array.isArray(movies));
 
     moviesGrid.innerHTML = '';
     
-    if (!movies || movies.length === 0) {
+    if (!movies || !Array.isArray(movies) || movies.length === 0) {
       moviesGrid.innerHTML = '<div class="error">Фильмы не найдены</div>';
       isLoading = false;
       return;
     }
+    
+    console.log('Starting to render', movies.length, 'movies');
     
     movies.forEach((movie, index) => {
       const card = createMovieCard(movie);
@@ -194,8 +215,10 @@ async function loadMovies() {
       moviesGrid.appendChild(card);
     });
 
+    console.log('Rendering complete');
+
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error in loadMovies:', error);
     moviesGrid.innerHTML = '<div class="error">Произошла ошибка: ' + error.message + '</div>';
   }
   

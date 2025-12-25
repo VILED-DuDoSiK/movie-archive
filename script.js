@@ -5,7 +5,6 @@ let currentPage = 1;
 let currentCategory = 'popular';
 let searchQuery = '';
 let isLoading = false;
-let allMoviesCache = [];
 
 const moviesGrid = document.getElementById('moviesGrid');
 const searchInput = document.getElementById('searchInput');
@@ -13,57 +12,80 @@ const btnPopular = document.getElementById('btnPopular');
 const btnTop = document.getElementById('btnTop');
 const btnFavorites = document.getElementById('btnFavorites');
 
+async function fetchWithTimeout(url, timeout = 10000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    throw error;
+  }
+}
+
 async function fetchPopularMovies() {
-  const keywords = ['avengers', 'star', 'war', 'love', 'dark', 'action', 'drama', 'thriller'];
   const movies = [];
   
-  for (const keyword of keywords.slice(0, 3)) {
+  const queries = ['avengers', 'star', 'war', 'love', 'dark'];
+  
+  for (const keyword of queries) {
     try {
-      const response = await fetch(`${OMDb_BASE_URL}/?s=${keyword}&type=movie&page=1&apikey=${OMDb_API_KEY}`);
+      console.log(`Fetching: ${keyword}`);
+      const url = `${OMDb_BASE_URL}/?s=${keyword}&type=movie&page=1&apikey=${OMDb_API_KEY}`;
+      const response = await fetchWithTimeout(url);
       const data = await response.json();
+      
+      console.log('Response for', keyword, ':', data);
+      
       if (data.Search) {
         movies.push(...data.Search);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error(`Error fetching ${keyword}:`, e);
+    }
   }
   
   return [...new Map(movies.map(m => [m.imdbID, m])).values()];
 }
 
 async function fetchTopMovies() {
-  const keywords = ['godfather', 'shawshank', 'dark', 'inception', 'interstellar', 'matrix', 'pulp', 'fight'];
   const movies = [];
+  const queries = ['godfather', 'shawshank', 'inception', 'matrix'];
   
-  for (const keyword of keywords.slice(0, 4)) {
+  for (const keyword of queries) {
     try {
-      const response = await fetch(`${OMDb_BASE_URL}/?s=${keyword}&type=movie&page=1&apikey=${OMDb_API_KEY}`);
+      console.log(`Fetching top: ${keyword}`);
+      const url = `${OMDb_BASE_URL}/?s=${keyword}&type=movie&page=1&apikey=${OMDb_API_KEY}`;
+      const response = await fetchWithTimeout(url);
       const data = await response.json();
+      
+      console.log('Response for', keyword, ':', data);
+      
       if (data.Search) {
         movies.push(...data.Search);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error(`Error fetching ${keyword}:`, e);
+    }
   }
   
   return [...new Map(movies.map(m => [m.imdbID, m])).values()];
 }
 
 async function searchMovies(query, page = 1) {
-  const response = await fetch(`${OMDb_BASE_URL}/?s=${encodeURIComponent(query)}&type=movie&page=${page}&apikey=${OMDb_API_KEY}`);
+  const url = `${OMDb_BASE_URL}/?s=${encodeURIComponent(query)}&type=movie&page=${page}&apikey=${OMDb_API_KEY}`;
+  console.log('Search URL:', url);
   
-  if (!response.ok) throw new Error('Ошибка поиска');
+  const response = await fetchWithTimeout(url);
   const data = await response.json();
+  
+  console.log('Search response:', data);
   
   if (data.Response === 'False') return { Search: [] };
   return data;
-}
-
-async function fetchMovieDetails(imdbID) {
-  try {
-    const response = await fetch(`${OMDb_BASE_URL}/?i=${imdbID}&apikey=${OMDb_API_KEY}`);
-    return await response.json();
-  } catch (e) {
-    return null;
-  }
 }
 
 function getFavorites() {
@@ -102,12 +124,12 @@ function createMovieCard(movie) {
     ? movie.Poster 
     : 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="600"%3E%3Crect fill="%231a1a1a" width="400" height="600"/%3E%3Ctext fill="%238a857d" x="50%25" y="50%25" text-anchor="middle" dy=".3em" font-family="Courier Prime, monospace"%3ENo Image%3C/text%3E%3C/svg%3E';
   
-  const rating = movie.imdbRating && movie.imdbRating !== 'N/A' ? movie.imdbRating : '—';
-  const year = movie.Year && movie.Year !== 'N/A' ? movie.Year : '—';
+  const rating = movie.imdbRating || '—';
+  const year = movie.Year || '—';
   const favActive = isFavorite(movie.imdbID) ? 'active' : '';
 
   card.innerHTML = `
-    <img src="${posterPath}" alt="${movie.Title}" class="movie-poster" loading="lazy">
+    <img src="${posterPath}" alt="${movie.Title}" class="movie-poster" loading="lazy" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22600%22%3E%3Crect fill=%22%231a1a1a%22 width=%22400%22 height=%22600%22/%3E%3Ctext fill=%22%238a857d%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-family=%22Courier Prime, monospace%22%3ENo Image%3C/text%3E%3C/svg%3E'">
     <div class="movie-info">
       <h3 class="movie-title">${movie.Title}</h3>
       <div class="movie-meta">
@@ -172,8 +194,15 @@ async function loadMovies() {
       movies = await fetchTopMovies();
     }
 
-    allMoviesCache = movies;
+    console.log('Movies loaded:', movies.length);
+
     moviesGrid.innerHTML = '';
+    
+    if (movies.length === 0) {
+      moviesGrid.innerHTML = '<div class="error">Фильмы не найдены</div>';
+      isLoading = false;
+      return;
+    }
     
     movies.forEach((movie, index) => {
       const card = createMovieCard(movie);
@@ -183,7 +212,7 @@ async function loadMovies() {
 
   } catch (error) {
     console.error('Error:', error);
-    moviesGrid.innerHTML = '<div class="error">Произошла ошибка. Попробуйте позже.</div>';
+    moviesGrid.innerHTML = '<div class="error">Произошла ошибка: ' + error.message + '</div>';
   }
   
   isLoading = false;

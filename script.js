@@ -28,6 +28,10 @@ const loadMoreContainer = document.getElementById('loadMoreContainer');
 const resultsInfo = document.getElementById('resultsInfo');
 const pagination = document.getElementById('pagination');
 const itemsPerPageSelect = document.getElementById('itemsPerPage');
+const progressContainer = document.getElementById('progressContainer');
+const progressText = document.getElementById('progressText');
+const progressPercent = document.getElementById('progressPercent');
+const progressFill = document.getElementById('progressFill');
 
 const filterGenre = document.getElementById('filterGenre');
 const filterCountry = document.getElementById('filterCountry');
@@ -155,6 +159,7 @@ async function fetchTopMovies() {
 async function loadMoreMovies() {
   if (isLoading || currentGenreIndex >= allGenres.length) return;
   
+  progressContainer.classList.remove('hidden');
   btnLoadMore.disabled = true;
   btnLoadMore.textContent = 'Загрузка...';
   isLoading = true;
@@ -179,7 +184,7 @@ async function loadMoreMovies() {
     }
     
     if (currentGenreIndex >= allGenres.length) {
-      btnLoadMore.textContent = 'Все фильмы загружены';
+      btnLoadMore.textContent = 'Все жанры загружены';
       btnLoadMore.disabled = true;
     } else {
       btnLoadMore.textContent = `Загрузить ещё (жанры: ${currentGenreIndex}/${allGenres.length})`;
@@ -191,7 +196,26 @@ async function loadMoreMovies() {
     btnLoadMore.disabled = false;
   }
   
+  hideProgressBar();
   isLoading = false;
+}
+
+function updateLoadingProgress(genre, current, total) {
+  if (searchQuery || currentCategory === 'favorites') {
+    progressContainer.classList.add('hidden');
+    return;
+  }
+  
+  progressContainer.classList.remove('hidden');
+  const percentage = Math.round((current / total) * 100);
+  
+  progressText.textContent = `Загрузка ${genre}...`;
+  progressPercent.textContent = `${percentage}%`;
+  progressFill.style.width = `${percentage}%`;
+}
+
+function hideProgressBar() {
+  progressContainer.classList.add('hidden');
 }
 
 async function searchMovies(query, page = 1) {
@@ -505,9 +529,16 @@ async function loadMovies() {
   if (isLoading) return;
   
   isLoading = true;
-  moviesGrid.innerHTML = '<div class="loading">Загрузка (может занять до минуты)</div>';
+  moviesGrid.innerHTML = '<div class="loading">Загрузка</div>';
   pagination.innerHTML = '';
   loadMoreContainer.style.display = 'none';
+  
+  if (!searchQuery && currentCategory !== 'favorites') {
+    progressContainer.classList.remove('hidden');
+    progressText.textContent = 'Подготовка к загрузке...';
+    progressPercent.textContent = '0%';
+    progressFill.style.width = '0%';
+  }
 
   try {
     let movies;
@@ -531,6 +562,7 @@ async function loadMovies() {
     allMovies = movies;
     populateFilters(allMovies);
     applyFilters();
+    hideProgressBar();
 
     if (currentCategory !== 'favorites' && !searchQuery) {
       loadMoreContainer.style.display = 'block';
@@ -541,6 +573,7 @@ async function loadMovies() {
   } catch (error) {
     console.error('Error:', error);
     moviesGrid.innerHTML = '<div class="error">Произошла ошибка: ' + error.message + '</div>';
+    hideProgressBar();
   }
   
   isLoading = false;

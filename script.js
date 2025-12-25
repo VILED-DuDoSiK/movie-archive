@@ -1,5 +1,6 @@
 const OMDb_API_KEY = 'b9a5e69d';
 const OMDb_BASE_URL = 'https://www.omdbapi.com';
+const MOVIES_JSON_URL = 'movies.json';
 
 let currentPage = 1;
 let currentCategory = 'archive';
@@ -33,6 +34,23 @@ const filterType = document.getElementById('filterType');
 const filterRatingFrom = document.getElementById('filterRatingFrom');
 const filterRatingTo = document.getElementById('filterRatingTo');
 const filterSort = document.getElementById('filterSort');
+
+async function loadMoviesFromJSON() {
+  try {
+    const response = await fetch(MOVIES_JSON_URL);
+    const data = await response.json();
+    
+    if (data.movies && Array.isArray(data.movies)) {
+      console.log(`Загружено ${data.movies.length} фильмов из JSON`);
+      return data.movies;
+    }
+    
+    return [];
+  } catch (e) {
+    console.error('Ошибка загрузки movies.json:', e);
+    return null;
+  }
+}
 
 async function fetchWithTimeout(url, timeout = 10000) {
   const controller = new AbortController();
@@ -525,14 +543,26 @@ async function loadMovies() {
         return;
       }
     } else if (searchQuery) {
-      updateLoadingProgress(0, 100);
+      updateLoadingProgress(50, 100);
       const data = await searchMovies(searchQuery, currentPage);
       movies = data.Search || [];
+      updateLoadingProgress(100, 100);
       hideProgressBar();
     } else if (currentCategory === 'archive') {
-      updateLoadingProgress(0, 100);
-      movies = await fetchPopularMovies();
-      updateLoadingProgress(100, 100);
+      // Пытаемся загрузить из movies.json
+      updateLoadingProgress(10, 100);
+      const moviesFromJSON = await loadMoviesFromJSON();
+      
+      if (moviesFromJSON && moviesFromJSON.length > 0) {
+        updateLoadingProgress(100, 100);
+        movies = moviesFromJSON;
+        console.log(`Используем локальный архив: ${movies.length} фильмов`);
+      } else {
+        // Если JSON пуст или недоступен, загружаем из API
+        updateLoadingProgress(20, 100);
+        console.log('JSON не найден или пуст, загружаем из API...');
+        movies = await fetchPopularMovies();
+      }
       hideProgressBar();
     }
 

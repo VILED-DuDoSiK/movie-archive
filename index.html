@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Кино Архив</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="noise-overlay"></div>
+  
+  <div class="container">
+    <header>
+      <h1>КИНО АРХИВ</h1>
+      <div class="subtitle">Коллекция мирового кинематографа</div>
+      <div class="divider"></div>
+    </header>
+
+    <div class="controls">
+      <input type="text" class="search-input" placeholder="Поиск фильмов..." id="searchInput">
+      <button class="btn active" id="btnPopular">Популярные</button>
+      <button class="btn" id="btnTop">Топ</button>
+      <button class="btn" id="btnFavorites">Избранное</button>
+    </div>
+
+    <div class="movies-grid" id="moviesGrid"></div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

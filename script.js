@@ -44,7 +44,7 @@ async function fetchMoviesByKeywords(keywords) {
   
   for (const keyword of keywords) {
     try {
-      const url = `${OMDb_BASE_URL}/?s=${keyword}&type=movie&page=1&apikey=${OMDb_API_KEY}`;
+      const url = `${OMDb_BASE_URL}/?s=${encodeURIComponent(keyword)}&apikey=${OMDb_API_KEY}`;
       const response = await fetchWithTimeout(url);
       const data = await response.json();
       
@@ -73,7 +73,7 @@ async function fetchMoviesWithDetails(keywords) {
   const movies = await fetchMoviesByKeywords(keywords);
   
   const moviesWithDetails = await Promise.all(
-    movies.slice(0, 50).map(async (movie) => {
+    movies.slice(0, 80).map(async (movie) => {
       const details = await fetchMovieDetails(movie.imdbID);
       return { ...movie, ...details };
     })
@@ -83,17 +83,17 @@ async function fetchMoviesWithDetails(keywords) {
 }
 
 async function fetchPopularMovies() {
-  const queries = ['avengers', 'star', 'war', 'love', 'dark', 'action', 'drama', 'thriller', 'comedy', 'horror'];
+  const queries = ['avengers', 'star', 'war', 'love', 'dark', 'action', 'drama', 'thriller', 'comedy', 'horror', 'breaking', 'game', 'walking', 'friends', 'office'];
   return await fetchMoviesWithDetails(queries);
 }
 
 async function fetchTopMovies() {
-  const queries = ['godfather', 'shawshank', 'inception', 'matrix', 'pulp', 'fight', 'forrest', 'dark', 'interstellar', 'parasite'];
+  const queries = ['godfather', 'shawshank', 'inception', 'matrix', 'pulp', 'fight', 'forrest', 'dark', 'interstellar', 'parasite', 'breaking', 'wire', 'sopranos', 'twin'];
   return await fetchMoviesWithDetails(queries);
 }
 
 async function searchMovies(query, page = 1) {
-  const url = `${OMDb_BASE_URL}/?s=${encodeURIComponent(query)}&type=movie&page=${page}&apikey=${OMDb_API_KEY}`;
+  const url = `${OMDb_BASE_URL}/?s=${encodeURIComponent(query)}&apikey=${OMDb_API_KEY}`;
   
   const response = await fetchWithTimeout(url);
   const data = await response.json();
@@ -101,7 +101,7 @@ async function searchMovies(query, page = 1) {
   if (data.Response === 'False' || !data.Search) return { Search: [] };
   
   const moviesWithDetails = await Promise.all(
-    data.Search.slice(0, 50).map(async (movie) => {
+    data.Search.slice(0, 80).map(async (movie) => {
       const details = await fetchMovieDetails(movie.imdbID);
       return { ...movie, ...details };
     })
@@ -235,9 +235,12 @@ function applyFilters() {
   }
 
   if (filterType.value) {
+    console.log('Filtering by type:', filterType.value);
+    console.log('Movies before type filter:', filteredMovies.map(m => ({ title: m.Title, type: m.Type })));
     filteredMovies = filteredMovies.filter(m => 
       m.Type === filterType.value
     );
+    console.log('Movies after type filter:', filteredMovies.map(m => ({ title: m.Title, type: m.Type })));
   }
 
   if (filterRatingFrom.value) {
@@ -291,7 +294,7 @@ function createMovieCard(movie) {
   
   const rating = movie.imdbRating && movie.imdbRating !== 'N/A' ? movie.imdbRating : '—';
   const year = movie.Year && movie.Year !== 'N/A' ? movie.Year : '—';
-  const genre = movie.Genre ? movie.Genre.split(',').slice(0, 2).join(' / ') : (movie.Type === 'movie' ? 'Фильм' : 'Сериал');
+  const genre = movie.Genre ? movie.Genre.split(',').slice(0, 2).join(' / ') : (movie.Type === 'movie' ? 'Фильм' : movie.Type === 'series' ? 'Сериал' : movie.Type);
   const favActive = isFavorite(movie.imdbID) ? 'active' : '';
 
   card.innerHTML = `
@@ -376,6 +379,8 @@ async function loadMovies() {
     }
 
     allMovies = movies;
+    console.log('Loaded movies:', movies.length);
+    console.log('Movie types:', [...new Set(movies.map(m => m.Type))]);
     populateFilters(movies);
     applyFilters();
 

@@ -5,12 +5,25 @@ let currentPage = 1;
 let currentCategory = 'popular';
 let searchQuery = '';
 let isLoading = false;
+let allMovies = [];
+let filteredMovies = [];
 
 const moviesGrid = document.getElementById('moviesGrid');
 const searchInput = document.getElementById('searchInput');
 const btnPopular = document.getElementById('btnPopular');
 const btnTop = document.getElementById('btnTop');
 const btnFavorites = document.getElementById('btnFavorites');
+const btnResetFilters = document.getElementById('btnResetFilters');
+const resultsInfo = document.getElementById('resultsInfo');
+
+const filterGenre = document.getElementById('filterGenre');
+const filterCountry = document.getElementById('filterCountry');
+const filterYearFrom = document.getElementById('filterYearFrom');
+const filterYearTo = document.getElementById('filterYearTo');
+const filterType = document.getElementById('filterType');
+const filterRatingFrom = document.getElementById('filterRatingFrom');
+const filterRatingTo = document.getElementById('filterRatingTo');
+const filterSort = document.getElementById('filterSort');
 
 async function fetchWithTimeout(url, timeout = 10000) {
   const controller = new AbortController();
@@ -60,7 +73,7 @@ async function fetchMoviesWithDetails(keywords) {
   const movies = await fetchMoviesByKeywords(keywords);
   
   const moviesWithDetails = await Promise.all(
-    movies.slice(0, 20).map(async (movie) => {
+    movies.slice(0, 50).map(async (movie) => {
       const details = await fetchMovieDetails(movie.imdbID);
       return { ...movie, ...details };
     })
@@ -70,12 +83,12 @@ async function fetchMoviesWithDetails(keywords) {
 }
 
 async function fetchPopularMovies() {
-  const queries = ['avengers', 'star', 'war', 'love', 'dark'];
+  const queries = ['avengers', 'star', 'war', 'love', 'dark', 'action', 'drama', 'thriller', 'comedy', 'horror'];
   return await fetchMoviesWithDetails(queries);
 }
 
 async function fetchTopMovies() {
-  const queries = ['godfather', 'shawshank', 'inception', 'matrix', 'pulp'];
+  const queries = ['godfather', 'shawshank', 'inception', 'matrix', 'pulp', 'fight', 'forrest', 'dark', 'interstellar', 'parasite'];
   return await fetchMoviesWithDetails(queries);
 }
 
@@ -88,7 +101,7 @@ async function searchMovies(query, page = 1) {
   if (data.Response === 'False' || !data.Search) return { Search: [] };
   
   const moviesWithDetails = await Promise.all(
-    data.Search.slice(0, 20).map(async (movie) => {
+    data.Search.slice(0, 50).map(async (movie) => {
       const details = await fetchMovieDetails(movie.imdbID);
       return { ...movie, ...details };
     })
@@ -123,6 +136,149 @@ function isFavorite(imdbID) {
 function openInRutube(title) {
   const searchUrl = `https://rutube.ru/search/?query=${encodeURIComponent(title)}`;
   window.open(searchUrl, '_blank');
+}
+
+function extractGenres(movies) {
+  const genreSet = new Set();
+  movies.forEach(movie => {
+    if (movie.Genre) {
+      movie.Genre.split(',').forEach(g => genreSet.add(g.trim()));
+    }
+  });
+  return Array.from(genreSet).sort();
+}
+
+function extractCountries(movies) {
+  const countrySet = new Set();
+  movies.forEach(movie => {
+    if (movie.Country) {
+      movie.Country.split(',').forEach(c => countrySet.add(c.trim()));
+    }
+  });
+  return Array.from(countrySet).sort();
+}
+
+function extractYears(movies) {
+  const yearSet = new Set();
+  movies.forEach(movie => {
+    if (movie.Year) {
+      const year = parseInt(movie.Year);
+      if (!isNaN(year)) {
+        yearSet.add(year);
+      }
+    }
+  });
+  return Array.from(yearSet).sort((a, b) => b - a);
+}
+
+function populateFilters(movies) {
+  const genres = extractGenres(movies);
+  const countries = extractCountries(movies);
+  const years = extractYears(movies);
+
+  filterGenre.innerHTML = '<option value="">Все жанры</option>';
+  genres.forEach(genre => {
+    const option = document.createElement('option');
+    option.value = genre;
+    option.textContent = genre;
+    filterGenre.appendChild(option);
+  });
+
+  filterCountry.innerHTML = '<option value="">Все страны</option>';
+  countries.forEach(country => {
+    const option = document.createElement('option');
+    option.value = country;
+    option.textContent = country;
+    filterCountry.appendChild(option);
+  });
+
+  filterYearFrom.innerHTML = '<option value="">От</option>';
+  filterYearTo.innerHTML = '<option value="">До</option>';
+  years.forEach(year => {
+    const optFrom = document.createElement('option');
+    optFrom.value = year;
+    optFrom.textContent = year;
+    filterYearFrom.appendChild(optFrom);
+
+    const optTo = document.createElement('option');
+    optTo.value = year;
+    optTo.textContent = year;
+    filterYearTo.appendChild(optTo);
+  });
+}
+
+function applyFilters() {
+  filteredMovies = [...allMovies];
+
+  if (filterGenre.value) {
+    filteredMovies = filteredMovies.filter(m => 
+      m.Genre && m.Genre.includes(filterGenre.value)
+    );
+  }
+
+  if (filterCountry.value) {
+    filteredMovies = filteredMovies.filter(m => 
+      m.Country && m.Country.includes(filterCountry.value)
+    );
+  }
+
+  if (filterYearFrom.value) {
+    filteredMovies = filteredMovies.filter(m => 
+      m.Year && parseInt(m.Year) >= parseInt(filterYearFrom.value)
+    );
+  }
+
+  if (filterYearTo.value) {
+    filteredMovies = filteredMovies.filter(m => 
+      m.Year && parseInt(m.Year) <= parseInt(filterYearTo.value)
+    );
+  }
+
+  if (filterType.value) {
+    filteredMovies = filteredMovies.filter(m => 
+      m.Type === filterType.value
+    );
+  }
+
+  if (filterRatingFrom.value) {
+    filteredMovies = filteredMovies.filter(m => 
+      m.imdbRating && parseFloat(m.imdbRating) >= parseFloat(filterRatingFrom.value)
+    );
+  }
+
+  if (filterRatingTo.value) {
+    filteredMovies = filteredMovies.filter(m => 
+      m.imdbRating && parseFloat(m.imdbRating) <= parseFloat(filterRatingTo.value)
+    );
+  }
+
+  const sortValue = filterSort.value;
+  if (sortValue === 'year-desc') {
+    filteredMovies.sort((a, b) => parseInt(b.Year) - parseInt(a.Year));
+  } else if (sortValue === 'year-asc') {
+    filteredMovies.sort((a, b) => parseInt(a.Year) - parseInt(b.Year));
+  } else if (sortValue === 'rating-desc') {
+    filteredMovies.sort((a, b) => parseFloat(b.imdbRating || 0) - parseFloat(a.imdbRating || 0));
+  } else if (sortValue === 'rating-asc') {
+    filteredMovies.sort((a, b) => parseFloat(a.imdbRating || 0) - parseFloat(b.imdbRating || 0));
+  } else if (sortValue === 'title-asc') {
+    filteredMovies.sort((a, b) => a.Title.localeCompare(b.Title, 'ru'));
+  } else if (sortValue === 'title-desc') {
+    filteredMovies.sort((a, b) => b.Title.localeCompare(a.Title, 'ru'));
+  }
+
+  renderMovies(filteredMovies);
+  updateResultsInfo(filteredMovies.length);
+}
+
+function updateResultsInfo(count) {
+  if (currentCategory === 'favorites') {
+    resultsInfo.textContent = `Избранные фильмы: ${count}`;
+  } else if (searchQuery) {
+    resultsInfo.textContent = `Результаты поиска: ${count}`;
+  } else {
+    resultsInfo.textContent = `Найдено фильмов: ${count}`;
+  }
 }
 
 function createMovieCard(movie) {
@@ -179,6 +335,21 @@ function createMovieCard(movie) {
   return card;
 }
 
+function renderMovies(movies) {
+  moviesGrid.innerHTML = '';
+  
+  if (!movies || !Array.isArray(movies) || movies.length === 0) {
+    moviesGrid.innerHTML = '<div class="error">Фильмы не найдены</div>';
+    return;
+  }
+  
+  movies.forEach((movie, index) => {
+    const card = createMovieCard(movie);
+    card.style.animationDelay = `${index * 0.05}s`;
+    moviesGrid.appendChild(card);
+  });
+}
+
 async function loadMovies() {
   if (isLoading) return;
   
@@ -204,19 +375,9 @@ async function loadMovies() {
       movies = await fetchTopMovies();
     }
 
-    moviesGrid.innerHTML = '';
-    
-    if (!movies || !Array.isArray(movies) || movies.length === 0) {
-      moviesGrid.innerHTML = '<div class="error">Фильмы не найдены</div>';
-      isLoading = false;
-      return;
-    }
-    
-    movies.forEach((movie, index) => {
-      const card = createMovieCard(movie);
-      card.style.animationDelay = `${index * 0.05}s`;
-      moviesGrid.appendChild(card);
-    });
+    allMovies = movies;
+    populateFilters(movies);
+    applyFilters();
 
   } catch (error) {
     console.error('Error:', error);
@@ -229,6 +390,18 @@ async function loadMovies() {
 function setActiveButton(activeBtn) {
   [btnPopular, btnTop, btnFavorites].forEach(btn => btn.classList.remove('active'));
   activeBtn.classList.add('active');
+}
+
+function resetFilters() {
+  filterGenre.value = '';
+  filterCountry.value = '';
+  filterYearFrom.value = '';
+  filterYearTo.value = '';
+  filterType.value = '';
+  filterRatingFrom.value = '';
+  filterRatingTo.value = '';
+  filterSort.value = 'default';
+  applyFilters();
 }
 
 btnPopular.addEventListener('click', () => {
@@ -256,6 +429,12 @@ btnFavorites.addEventListener('click', () => {
   currentPage = 1;
   setActiveButton(btnFavorites);
   loadMovies();
+});
+
+btnResetFilters.addEventListener('click', resetFilters);
+
+[filterGenre, filterCountry, filterYearFrom, filterYearTo, filterType, filterRatingFrom, filterRatingTo, filterSort].forEach(filter => {
+  filter.addEventListener('change', applyFilters);
 });
 
 let searchTimeout;

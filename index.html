@@ -24,6 +24,97 @@
       <button class="btn" id="btnFavorites">Избранное</button>
     </div>
 
+    <div class="filters-panel" id="filtersPanel">
+      <div class="filters-header">
+        <h3>Фильтры</h3>
+        <button class="btn-reset" id="btnResetFilters">Сбросить</button>
+      </div>
+      
+      <div class="filters-grid">
+        <div class="filter-group">
+          <label>Жанр</label>
+          <select class="filter-select" id="filterGenre">
+            <option value="">Все жанры</option>
+          </select>
+        </div>
+        
+        <div class="filter-group">
+          <label>Страна</label>
+          <select class="filter-select" id="filterCountry">
+            <option value="">Все страны</option>
+          </select>
+        </div>
+        
+        <div class="filter-group">
+          <label>Год</label>
+          <div class="year-range">
+            <select class="filter-select year-select" id="filterYearFrom">
+              <option value="">От</option>
+            </select>
+            <select class="filter-select year-select" id="filterYearTo">
+              <option value="">До</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="filter-group">
+          <label>Тип</label>
+          <select class="filter-select" id="filterType">
+            <option value="">Все</option>
+            <option value="movie">Фильм</option>
+            <option value="series">Сериал</option>
+            <option value="episode">Эпизод</option>
+          </select>
+        </div>
+        
+        <div class="filter-group">
+          <label>Рейтинг IMDb</label>
+          <div class="rating-range">
+            <select class="filter-select rating-select" id="filterRatingFrom">
+              <option value="">От</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+            </select>
+            <select class="filter-select rating-select" id="filterRatingTo">
+              <option value="">До</option>
+              <option value="10">10</option>
+              <option value="9">9</option>
+              <option value="8">8</option>
+              <option value="7">7</option>
+              <option value="6">6</option>
+              <option value="5">5</option>
+              <option value="4">4</option>
+              <option value="3">3</option>
+              <option value="2">2</option>
+              <option value="1">1</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="filter-group">
+          <label>Сортировка</label>
+          <select class="filter-select" id="filterSort">
+            <option value="default">По умолчанию</option>
+            <option value="year-desc">Год (новые)</option>
+            <option value="year-asc">Год (старые)</option>
+            <option value="rating-desc">Рейтинг (высокий)</option>
+            <option value="rating-asc">Рейтинг (низкий)</option>
+            <option value="title-asc">Название (А-Я)</option>
+            <option value="title-desc">Название (Я-А)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="results-info" id="resultsInfo"></div>
+
     <div class="movies-grid" id="moviesGrid"></div>
   </div>
 

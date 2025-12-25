@@ -6,6 +6,7 @@
   <title>Кино Архив</title>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="pagination.css">
 </head>
 <body>
   <div class="noise-overlay"></div>
@@ -110,12 +111,28 @@
             <option value="title-desc">Название (Я-А)</option>
           </select>
         </div>
+
+        <div class="filter-group">
+          <label>На странице</label>
+          <select class="filter-select" id="itemsPerPage">
+            <option value="12">12</option>
+            <option value="24" selected>24</option>
+            <option value="48">48</option>
+            <option value="96">96</option>
+          </select>
+        </div>
       </div>
     </div>
 
     <div class="results-info" id="resultsInfo"></div>
 
     <div class="movies-grid" id="moviesGrid"></div>
+
+    <div class="pagination" id="pagination"></div>
+
+    <div class="load-more-container" id="loadMoreContainer">
+      <button class="btn-load-more" id="btnLoadMore">Загрузить ещё</button>
+    </div>
   </div>
 
   <script src="script.js"></script>

@@ -7,6 +7,15 @@ let searchQuery = '';
 let isLoading = false;
 let allMovies = [];
 let filteredMovies = [];
+let itemsPerPage = 24;
+let currentDisplayPage = 1;
+let searchKeywords = [
+  'avengers', 'star', 'war', 'love', 'dark', 'action', 'drama', 'thriller', 'comedy', 'horror',
+  'breaking', 'game', 'walking', 'friends', 'office', 'lost', 'sherlock', 'house',
+  'adventure', 'fantasy', 'scifi', 'crime', 'mystery', 'romance', 'western', 'documentary',
+  'animation', 'family', 'biography', 'history', 'music', 'sport', 'musical', 'news'
+];
+let currentKeywordIndex = 0;
 
 const moviesGrid = document.getElementById('moviesGrid');
 const searchInput = document.getElementById('searchInput');
@@ -14,7 +23,11 @@ const btnPopular = document.getElementById('btnPopular');
 const btnTop = document.getElementById('btnTop');
 const btnFavorites = document.getElementById('btnFavorites');
 const btnResetFilters = document.getElementById('btnResetFilters');
+const btnLoadMore = document.getElementById('btnLoadMore');
+const loadMoreContainer = document.getElementById('loadMoreContainer');
 const resultsInfo = document.getElementById('resultsInfo');
+const pagination = document.getElementById('pagination');
+const itemsPerPageSelect = document.getElementById('itemsPerPage');
 
 const filterGenre = document.getElementById('filterGenre');
 const filterCountry = document.getElementById('filterCountry');
@@ -41,19 +54,26 @@ async function fetchWithTimeout(url, timeout = 10000) {
 
 async function fetchMoviesByKeywords(keywords) {
   const movies = [];
+  const batchSize = 5;
   
-  for (const keyword of keywords) {
-    try {
-      const url = `${OMDb_BASE_URL}/?s=${encodeURIComponent(keyword)}&apikey=${OMDb_API_KEY}`;
-      const response = await fetchWithTimeout(url);
-      const data = await response.json();
-      
-      if (data && data.Search && Array.isArray(data.Search)) {
-        movies.push(...data.Search);
-      }
-    } catch (e) {
-      console.error(`Error fetching ${keyword}:`, e);
-    }
+  for (let i = 0; i < keywords.length; i += batchSize) {
+    const batch = keywords.slice(i, i + batchSize);
+    
+    await Promise.all(
+      batch.map(async (keyword) => {
+        try {
+          const url = `${OMDb_BASE_URL}/?s=${encodeURIComponent(keyword)}&apikey=${OMDb_API_KEY}`;
+          const response = await fetchWithTimeout(url);
+          const data = await response.json();
+          
+          if (data && data.Search && Array.isArray(data.Search)) {
+            movies.push(...data.Search);
+          }
+        } catch (e) {
+          console.error(`Error fetching ${keyword}:`, e);
+        }
+      })
+    );
   }
   
   return [...new Map(movies.map(m => [m.imdbID, m])).values()];
@@ -69,11 +89,12 @@ async function fetchMovieDetails(imdbID) {
   }
 }
 
-async function fetchMoviesWithDetails(keywords) {
+async function fetchMoviesWithDetails(keywords, limit = 100) {
   const movies = await fetchMoviesByKeywords(keywords);
+  const uniqueMovies = [...new Map(movies.map(m => [m.imdbID, m])).values()].slice(0, limit);
   
   const moviesWithDetails = await Promise.all(
-    movies.slice(0, 80).map(async (movie) => {
+    uniqueMovies.map(async (movie) => {
       const details = await fetchMovieDetails(movie.imdbID);
       return { ...movie, ...details };
     })
@@ -82,14 +103,56 @@ async function fetchMoviesWithDetails(keywords) {
   return moviesWithDetails;
 }
 
+async function loadMoreMovies() {
+  if (isLoading) return;
+  
+  btnLoadMore.disabled = true;
+  btnLoadMore.textContent = 'Загрузка...';
+  isLoading = true;
+
+  try {
+    const nextKeywords = searchKeywords.slice(currentKeywordIndex, currentKeywordIndex + 5);
+    const newMovies = await fetchMoviesWithDetails(nextKeywords, 50);
+    
+    currentKeywordIndex += 5;
+    
+    if (newMovies.length > 0) {
+      const newIds = new Set(allMovies.map(m => m.imdbID));
+      const uniqueNewMovies = newMovies.filter(m => !newIds.has(m.imdbID));
+      
+      allMovies = [...allMovies, ...uniqueNewMovies];
+      populateFilters(allMovies);
+      applyFilters();
+    }
+    
+    if (currentKeywordIndex >= searchKeywords.length || newMovies.length === 0) {
+      btnLoadMore.textContent = 'Все фильмы загружены';
+      btnLoadMore.disabled = true;
+    } else {
+      btnLoadMore.textContent = 'Загрузить ещё';
+      btnLoadMore.disabled = false;
+    }
+  } catch (error) {
+    console.error('Error loading more movies:', error);
+    btnLoadMore.textContent = 'Ошибка загрузки';
+    btnLoadMore.disabled = false;
+  }
+  
+  isLoading = false;
+}
+
 async function fetchPopularMovies() {
-  const queries = ['avengers', 'star', 'war', 'love', 'dark', 'action', 'drama', 'thriller', 'comedy', 'horror', 'breaking', 'game', 'walking', 'friends', 'office'];
-  return await fetchMoviesWithDetails(queries);
+  const initialKeywords = searchKeywords.slice(0, 10);
+  currentKeywordIndex = 10;
+  return await fetchMoviesWithDetails(initialKeywords, 100);
 }
 
 async function fetchTopMovies() {
-  const queries = ['godfather', 'shawshank', 'inception', 'matrix', 'pulp', 'fight', 'forrest', 'dark', 'interstellar', 'parasite', 'breaking', 'wire', 'sopranos', 'twin'];
-  return await fetchMoviesWithDetails(queries);
+  const queries = ['godfather', 'shawshank', 'inception', 'matrix', 'pulp', 'fight', 'forrest', 'dark', 'interstellar', 'parasite', 'breaking', 'wire', 'sopranos', 'twin', 'goodfellas', 'pianist', 'schindler', 'casablanca', 'citizen', 'vertigo'];
+  const movies = await fetchMoviesWithDetails(queries, 100);
+  searchKeywords = [...queries, ...searchKeywords];
+  currentKeywordIndex = queries.length;
+  return movies;
 }
 
 async function searchMovies(query, page = 1) {
@@ -101,7 +164,7 @@ async function searchMovies(query, page = 1) {
   if (data.Response === 'False' || !data.Search) return { Search: [] };
   
   const moviesWithDetails = await Promise.all(
-    data.Search.slice(0, 80).map(async (movie) => {
+    data.Search.map(async (movie) => {
       const details = await fetchMovieDetails(movie.imdbID);
       return { ...movie, ...details };
     })
@@ -176,11 +239,17 @@ function populateFilters(movies) {
   const countries = extractCountries(movies);
   const years = extractYears(movies);
 
+  const currentGenre = filterGenre.value;
+  const currentCountry = filterCountry.value;
+  const currentYearFrom = filterYearFrom.value;
+  const currentYearTo = filterYearTo.value;
+
   filterGenre.innerHTML = '<option value="">Все жанры</option>';
   genres.forEach(genre => {
     const option = document.createElement('option');
     option.value = genre;
     option.textContent = genre;
+    if (genre === currentGenre) option.selected = true;
     filterGenre.appendChild(option);
   });
 
@@ -189,6 +258,7 @@ function populateFilters(movies) {
     const option = document.createElement('option');
     option.value = country;
     option.textContent = country;
+    if (country === currentCountry) option.selected = true;
     filterCountry.appendChild(option);
   });
 
@@ -198,11 +268,13 @@ function populateFilters(movies) {
     const optFrom = document.createElement('option');
     optFrom.value = year;
     optFrom.textContent = year;
+    if (year.toString() === currentYearFrom) optFrom.selected = true;
     filterYearFrom.appendChild(optFrom);
 
     const optTo = document.createElement('option');
     optTo.value = year;
     optTo.textContent = year;
+    if (year.toString() === currentYearTo) optTo.selected = true;
     filterYearTo.appendChild(optTo);
   });
 }
@@ -235,12 +307,9 @@ function applyFilters() {
   }
 
   if (filterType.value) {
-    console.log('Filtering by type:', filterType.value);
-    console.log('Movies before type filter:', filteredMovies.map(m => ({ title: m.Title, type: m.Type })));
     filteredMovies = filteredMovies.filter(m => 
       m.Type === filterType.value
     );
-    console.log('Movies after type filter:', filteredMovies.map(m => ({ title: m.Title, type: m.Type })));
   }
 
   if (filterRatingFrom.value) {
@@ -270,7 +339,9 @@ function applyFilters() {
     filteredMovies.sort((a, b) => b.Title.localeCompare(a.Title, 'ru'));
   }
 
-  renderMovies(filteredMovies);
+  currentDisplayPage = 1;
+  renderMovies();
+  renderPagination();
   updateResultsInfo(filteredMovies.length);
 }
 
@@ -283,6 +354,59 @@ function updateResultsInfo(count) {
     resultsInfo.textContent = `Найдено фильмов: ${count}`;
   }
 }
+
+function renderMovies() {
+  const start = (currentDisplayPage - 1) * itemsPerPage;
+  const end = start + itemsPerPage;
+  const moviesToRender = filteredMovies.slice(start, end);
+  
+  moviesGrid.innerHTML = '';
+  
+  if (!moviesToRender || moviesToRender.length === 0) {
+    moviesGrid.innerHTML = '<div class="error">Фильмы не найдены</div>';
+    pagination.innerHTML = '';
+    return;
+  }
+  
+  moviesToRender.forEach((movie, index) => {
+    const card = createMovieCard(movie);
+    card.style.animationDelay = `${index * 0.05}s`;
+    moviesGrid.appendChild(card);
+  });
+}
+
+function renderPagination() {
+  const totalPages = Math.ceil(filteredMovies.length / itemsPerPage);
+  
+  if (totalPages <= 1) {
+    pagination.innerHTML = '';
+    return;
+  }
+
+  let html = '';
+  
+  html += `<button ${currentDisplayPage === 1 ? 'disabled' : ''} onclick="changePage(1)">«</button>`;
+  html += `<button ${currentDisplayPage === 1 ? 'disabled' : ''} onclick="changePage(${currentDisplayPage - 1})">‹</button>`;
+
+  const startPage = Math.max(1, currentDisplayPage - 2);
+  const endPage = Math.min(totalPages, currentDisplayPage + 2);
+
+  for (let i = startPage; i <= endPage; i++) {
+    html += `<button class="${i === currentDisplayPage ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
+  }
+
+  html += `<button ${currentDisplayPage === totalPages ? 'disabled' : ''} onclick="changePage(${currentDisplayPage + 1})">›</button>`;
+  html += `<button ${currentDisplayPage === totalPages ? 'disabled' : ''} onclick="changePage(${totalPages})">»</button>`;
+
+  pagination.innerHTML = html;
+}
+
+window.changePage = function(page) {
+  currentDisplayPage = page;
+  renderMovies();
+  renderPagination();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
 
 function createMovieCard(movie) {
   const card = document.createElement('div');
@@ -338,26 +462,13 @@ function createMovieCard(movie) {
   return card;
 }
 
-function renderMovies(movies) {
-  moviesGrid.innerHTML = '';
-  
-  if (!movies || !Array.isArray(movies) || movies.length === 0) {
-    moviesGrid.innerHTML = '<div class="error">Фильмы не найдены</div>';
-    return;
-  }
-  
-  movies.forEach((movie, index) => {
-    const card = createMovieCard(movie);
-    card.style.animationDelay = `${index * 0.05}s`;
-    moviesGrid.appendChild(card);
-  });
-}
-
 async function loadMovies() {
   if (isLoading) return;
   
   isLoading = true;
   moviesGrid.innerHTML = '<div class="loading">Загрузка</div>';
+  pagination.innerHTML = '';
+  loadMoreContainer.style.display = 'none';
 
   try {
     let movies;
@@ -379,10 +490,12 @@ async function loadMovies() {
     }
 
     allMovies = movies;
-    console.log('Loaded movies:', movies.length);
-    console.log('Movie types:', [...new Set(movies.map(m => m.Type))]);
-    populateFilters(movies);
+    populateFilters(allMovies);
     applyFilters();
+
+    if (currentCategory !== 'favorites' && !searchQuery) {
+      loadMoreContainer.style.display = 'block';
+    }
 
   } catch (error) {
     console.error('Error:', error);
@@ -414,6 +527,7 @@ btnPopular.addEventListener('click', () => {
   searchQuery = '';
   searchInput.value = '';
   currentPage = 1;
+  currentKeywordIndex = 0;
   setActiveButton(btnPopular);
   loadMovies();
 });
@@ -423,6 +537,7 @@ btnTop.addEventListener('click', () => {
   searchQuery = '';
   searchInput.value = '';
   currentPage = 1;
+  currentKeywordIndex = 0;
   setActiveButton(btnTop);
   loadMovies();
 });
@@ -437,9 +552,17 @@ btnFavorites.addEventListener('click', () => {
 });
 
 btnResetFilters.addEventListener('click', resetFilters);
+btnLoadMore.addEventListener('click', loadMoreMovies);
 
 [filterGenre, filterCountry, filterYearFrom, filterYearTo, filterType, filterRatingFrom, filterRatingTo, filterSort].forEach(filter => {
   filter.addEventListener('change', applyFilters);
+});
+
+itemsPerPageSelect.addEventListener('change', (e) => {
+  itemsPerPage = parseInt(e.target.value);
+  currentDisplayPage = 1;
+  renderMovies();
+  renderPagination();
 });
 
 let searchTimeout;

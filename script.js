@@ -9,13 +9,13 @@ let allMovies = [];
 let filteredMovies = [];
 let itemsPerPage = 24;
 let currentDisplayPage = 1;
-let searchKeywords = [
-  'avengers', 'star', 'war', 'love', 'dark', 'action', 'drama', 'thriller', 'comedy', 'horror',
-  'breaking', 'game', 'walking', 'friends', 'office', 'lost', 'sherlock', 'house',
-  'adventure', 'fantasy', 'scifi', 'crime', 'mystery', 'romance', 'western', 'documentary',
-  'animation', 'family', 'biography', 'history', 'music', 'sport', 'musical', 'news'
+let allGenres = [
+  'Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime', 'Documentary',
+  'Drama', 'Family', 'Fantasy', 'Film-Noir', 'Game-Show', 'History', 'Horror',
+  'Music', 'Musical', 'Mystery', 'News', 'Reality-TV', 'Romance', 'Sci-Fi',
+  'Sport', 'Talk-Show', 'Thriller', 'War', 'Western'
 ];
-let currentKeywordIndex = 0;
+let currentGenreIndex = 0;
 
 const moviesGrid = document.getElementById('moviesGrid');
 const searchInput = document.getElementById('searchInput');
@@ -54,29 +54,50 @@ async function fetchWithTimeout(url, timeout = 10000) {
 
 async function fetchMoviesByKeywords(keywords) {
   const movies = [];
-  const batchSize = 5;
   
-  for (let i = 0; i < keywords.length; i += batchSize) {
-    const batch = keywords.slice(i, i + batchSize);
-    
-    await Promise.all(
-      batch.map(async (keyword) => {
-        try {
-          const url = `${OMDb_BASE_URL}/?s=${encodeURIComponent(keyword)}&apikey=${OMDb_API_KEY}`;
-          const response = await fetchWithTimeout(url);
-          const data = await response.json();
-          
-          if (data && data.Search && Array.isArray(data.Search)) {
-            movies.push(...data.Search);
-          }
-        } catch (e) {
-          console.error(`Error fetching ${keyword}:`, e);
-        }
-      })
-    );
+  for (const keyword of keywords) {
+    try {
+      const url = `${OMDb_BASE_URL}/?s=${encodeURIComponent(keyword)}&apikey=${OMDb_API_KEY}`;
+      const response = await fetchWithTimeout(url);
+      const data = await response.json();
+      
+      if (data && data.Search && Array.isArray(data.Search)) {
+        movies.push(...data.Search);
+      }
+    } catch (e) {
+      console.error(`Error fetching ${keyword}:`, e);
+    }
   }
   
   return [...new Map(movies.map(m => [m.imdbID, m])).values()];
+}
+
+async function fetchMoviesByGenre(genre, page = 1) {
+  const movies = [];
+  const commonWords = ['movie', 'film', 'story', 'tale', 'chronicle'];
+  
+  for (const word of commonWords) {
+    try {
+      const url = `${OMDb_BASE_URL}/?s=${encodeURIComponent(word)}&type=movie&page=${page}&apikey=${OMDb_API_KEY}`;
+      const response = await fetchWithTimeout(url);
+      const data = await response.json();
+      
+      if (data && data.Search && Array.isArray(data.Search)) {
+        const detailsPromises = data.Search.slice(0, 10).map(movie => fetchMovieDetails(movie.imdbID));
+        const detailsResults = await Promise.all(detailsPromises);
+        
+        const filteredByGenre = detailsResults.filter(movie => 
+          movie && movie.Genre && movie.Genre.toLowerCase().includes(genre.toLowerCase())
+        );
+        
+        movies.push(...filteredByGenre);
+      }
+    } catch (e) {
+      console.error(`Error fetching ${genre} with ${word}:`, e);
+    }
+  }
+  
+  return movies;
 }
 
 async function fetchMovieDetails(imdbID) {
@@ -89,47 +110,79 @@ async function fetchMovieDetails(imdbID) {
   }
 }
 
-async function fetchMoviesWithDetails(keywords, limit = 100) {
-  const movies = await fetchMoviesByKeywords(keywords);
-  const uniqueMovies = [...new Map(movies.map(m => [m.imdbID, m])).values()].slice(0, limit);
+async function fetchComprehensiveMovies() {
+  const movies = [];
+  const batchSize = 3;
   
-  const moviesWithDetails = await Promise.all(
-    uniqueMovies.map(async (movie) => {
-      const details = await fetchMovieDetails(movie.imdbID);
-      return { ...movie, ...details };
-    })
+  for (let i = 0; i < allGenres.length; i += batchSize) {
+    const genresBatch = allGenres.slice(i, i + batchSize);
+    
+    const genreMovies = await Promise.all(
+      genresBatch.map(genre => fetchMoviesByGenre(genre))
+    );
+    
+    movies.push(...genreMovies.flat());
+  }
+  
+  return [...new Map(movies.map(m => [m.imdbID, m])).values()];
+}
+
+async function fetchPopularMovies() {
+  currentGenreIndex = 0;
+  const popularGenres = ['Action', 'Drama', 'Comedy', 'Thriller', 'Horror'];
+  const movies = await fetchComprehensiveMovies();
+  const filteredMovies = movies.filter(m => {
+    if (!m.Genre) return false;
+    return popularGenres.some(g => m.Genre.toLowerCase().includes(g.toLowerCase()));
+  });
+  return filteredMovies;
+}
+
+async function fetchTopMovies() {
+  const topKeywords = [
+    'godfather', 'shawshank', 'inception', 'matrix', 'pulp', 'fight', 'forrest',
+    'dark', 'interstellar', 'parasite', 'breaking', 'wire', 'sopranos',
+    'twin', 'goodfellas', 'pianist', 'schindler', 'casablanca', 'citizen',
+    'vertigo', 'psycho', 'rear', 'north', 'vertigo'
+  ];
+  const searchMovies = await fetchMoviesByKeywords(topKeywords);
+  const detailsMovies = await Promise.all(
+    searchMovies.slice(0, 150).map(m => fetchMovieDetails(m.imdbID))
   );
-  
-  return moviesWithDetails;
+  return detailsMovies.filter(m => m !== null);
 }
 
 async function loadMoreMovies() {
-  if (isLoading) return;
+  if (isLoading || currentGenreIndex >= allGenres.length) return;
   
   btnLoadMore.disabled = true;
   btnLoadMore.textContent = 'Загрузка...';
   isLoading = true;
 
   try {
-    const nextKeywords = searchKeywords.slice(currentKeywordIndex, currentKeywordIndex + 5);
-    const newMovies = await fetchMoviesWithDetails(nextKeywords, 50);
+    const nextGenres = allGenres.slice(currentGenreIndex, currentGenreIndex + 2);
     
-    currentKeywordIndex += 5;
+    const newMovies = await Promise.all(
+      nextGenres.map(genre => fetchMoviesByGenre(genre))
+    );
     
-    if (newMovies.length > 0) {
+    const flatMovies = newMovies.flat();
+    currentGenreIndex += 2;
+    
+    if (flatMovies.length > 0) {
       const newIds = new Set(allMovies.map(m => m.imdbID));
-      const uniqueNewMovies = newMovies.filter(m => !newIds.has(m.imdbID));
+      const uniqueNewMovies = flatMovies.filter(m => m && !newIds.has(m.imdbID));
       
       allMovies = [...allMovies, ...uniqueNewMovies];
       populateFilters(allMovies);
       applyFilters();
     }
     
-    if (currentKeywordIndex >= searchKeywords.length || newMovies.length === 0) {
+    if (currentGenreIndex >= allGenres.length) {
       btnLoadMore.textContent = 'Все фильмы загружены';
       btnLoadMore.disabled = true;
     } else {
-      btnLoadMore.textContent = 'Загрузить ещё';
+      btnLoadMore.textContent = `Загрузить ещё (жанры: ${currentGenreIndex}/${allGenres.length})`;
       btnLoadMore.disabled = false;
     }
   } catch (error) {
@@ -139,20 +192,6 @@ async function loadMoreMovies() {
   }
   
   isLoading = false;
-}
-
-async function fetchPopularMovies() {
-  const initialKeywords = searchKeywords.slice(0, 10);
-  currentKeywordIndex = 10;
-  return await fetchMoviesWithDetails(initialKeywords, 100);
-}
-
-async function fetchTopMovies() {
-  const queries = ['godfather', 'shawshank', 'inception', 'matrix', 'pulp', 'fight', 'forrest', 'dark', 'interstellar', 'parasite', 'breaking', 'wire', 'sopranos', 'twin', 'goodfellas', 'pianist', 'schindler', 'casablanca', 'citizen', 'vertigo'];
-  const movies = await fetchMoviesWithDetails(queries, 100);
-  searchKeywords = [...queries, ...searchKeywords];
-  currentKeywordIndex = queries.length;
-  return movies;
 }
 
 async function searchMovies(query, page = 1) {
@@ -466,7 +505,7 @@ async function loadMovies() {
   if (isLoading) return;
   
   isLoading = true;
-  moviesGrid.innerHTML = '<div class="loading">Загрузка</div>';
+  moviesGrid.innerHTML = '<div class="loading">Загрузка (может занять до минуты)</div>';
   pagination.innerHTML = '';
   loadMoreContainer.style.display = 'none';
 
@@ -495,6 +534,8 @@ async function loadMovies() {
 
     if (currentCategory !== 'favorites' && !searchQuery) {
       loadMoreContainer.style.display = 'block';
+      btnLoadMore.textContent = `Загрузить ещё (жанры: ${currentGenreIndex}/${allGenres.length})`;
+      btnLoadMore.disabled = false;
     }
 
   } catch (error) {
@@ -527,7 +568,7 @@ btnPopular.addEventListener('click', () => {
   searchQuery = '';
   searchInput.value = '';
   currentPage = 1;
-  currentKeywordIndex = 0;
+  currentGenreIndex = 0;
   setActiveButton(btnPopular);
   loadMovies();
 });
@@ -537,7 +578,7 @@ btnTop.addEventListener('click', () => {
   searchQuery = '';
   searchInput.value = '';
   currentPage = 1;
-  currentKeywordIndex = 0;
+  currentGenreIndex = 0;
   setActiveButton(btnTop);
   loadMovies();
 });

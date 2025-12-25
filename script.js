@@ -27,60 +27,74 @@ async function fetchWithTimeout(url, timeout = 10000) {
 }
 
 async function fetchMoviesByKeywords(keywords) {
-  console.log('fetchMoviesByKeywords called with:', keywords);
   const movies = [];
   
   for (const keyword of keywords) {
     try {
-      console.log(`Fetching: ${keyword}`);
       const url = `${OMDb_BASE_URL}/?s=${keyword}&type=movie&page=1&apikey=${OMDb_API_KEY}`;
       const response = await fetchWithTimeout(url);
       const data = await response.json();
       
-      console.log('Response for', keyword, ':', data);
-      
       if (data && data.Search && Array.isArray(data.Search)) {
         movies.push(...data.Search);
-        console.log('Movies added for', keyword, ':', data.Search.length);
       }
     } catch (e) {
       console.error(`Error fetching ${keyword}:`, e);
     }
   }
   
-  console.log('Total movies before dedup:', movies.length);
-  const uniqueMovies = [...new Map(movies.map(m => [m.imdbID, m])).values()];
-  console.log('Total movies after dedup:', uniqueMovies.length);
-  return uniqueMovies;
+  return [...new Map(movies.map(m => [m.imdbID, m])).values()];
+}
+
+async function fetchMovieDetails(imdbID) {
+  try {
+    const url = `${OMDb_BASE_URL}/?i=${imdbID}&apikey=${OMDb_API_KEY}`;
+    const response = await fetchWithTimeout(url);
+    return await response.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+async function fetchMoviesWithDetails(keywords) {
+  const movies = await fetchMoviesByKeywords(keywords);
+  
+  const moviesWithDetails = await Promise.all(
+    movies.slice(0, 20).map(async (movie) => {
+      const details = await fetchMovieDetails(movie.imdbID);
+      return { ...movie, ...details };
+    })
+  );
+  
+  return moviesWithDetails;
 }
 
 async function fetchPopularMovies() {
-  console.log('fetchPopularMovies called');
   const queries = ['avengers', 'star', 'war', 'love', 'dark'];
-  const result = await fetchMoviesByKeywords(queries);
-  console.log('fetchPopularMovies returning:', result.length, 'movies');
-  return result;
+  return await fetchMoviesWithDetails(queries);
 }
 
 async function fetchTopMovies() {
-  console.log('fetchTopMovies called');
-  const queries = ['godfather', 'shawshank', 'inception', 'matrix'];
-  const result = await fetchMoviesByKeywords(queries);
-  console.log('fetchTopMovies returning:', result.length, 'movies');
-  return result;
+  const queries = ['godfather', 'shawshank', 'inception', 'matrix', 'pulp'];
+  return await fetchMoviesWithDetails(queries);
 }
 
 async function searchMovies(query, page = 1) {
   const url = `${OMDb_BASE_URL}/?s=${encodeURIComponent(query)}&type=movie&page=${page}&apikey=${OMDb_API_KEY}`;
-  console.log('Search URL:', url);
   
   const response = await fetchWithTimeout(url);
   const data = await response.json();
   
-  console.log('Search response:', data);
-  
   if (data.Response === 'False' || !data.Search) return { Search: [] };
-  return data;
+  
+  const moviesWithDetails = await Promise.all(
+    data.Search.slice(0, 20).map(async (movie) => {
+      const details = await fetchMovieDetails(movie.imdbID);
+      return { ...movie, ...details };
+    })
+  );
+  
+  return { Search: moviesWithDetails };
 }
 
 function getFavorites() {
@@ -119,8 +133,9 @@ function createMovieCard(movie) {
     ? movie.Poster 
     : 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="600"%3E%3Crect fill="%231a1a1a" width="400" height="600"/%3E%3Ctext fill="%238a857d" x="50%25" y="50%25" text-anchor="middle" dy=".3em" font-family="Courier Prime, monospace"%3ENo Image%3C/text%3E%3C/svg%3E';
   
-  const rating = movie.imdbRating || '—';
-  const year = movie.Year || '—';
+  const rating = movie.imdbRating && movie.imdbRating !== 'N/A' ? movie.imdbRating : '—';
+  const year = movie.Year && movie.Year !== 'N/A' ? movie.Year : '—';
+  const genre = movie.Genre ? movie.Genre.split(',').slice(0, 2).join(' / ') : (movie.Type === 'movie' ? 'Фильм' : 'Сериал');
   const favActive = isFavorite(movie.imdbID) ? 'active' : '';
 
   card.innerHTML = `
@@ -136,7 +151,7 @@ function createMovieCard(movie) {
           ${rating}
         </span>
       </div>
-      <div class="movie-genres">${movie.Type === 'movie' ? 'Фильм' : 'Сериал'}</div>
+      <div class="movie-genres">${genre}</div>
       <div class="movie-actions">
         <button class="action-btn favorite ${favActive}" data-id="${movie.imdbID}">
           ${favActive ? '★ В избранном' : '☆ В избранное'}
@@ -165,8 +180,6 @@ function createMovieCard(movie) {
 }
 
 async function loadMovies() {
-  console.log('loadMovies called, category:', currentCategory);
-  
   if (isLoading) return;
   
   isLoading = true;
@@ -176,7 +189,6 @@ async function loadMovies() {
     let movies;
     
     if (currentCategory === 'favorites') {
-      console.log('Loading favorites');
       movies = getFavorites() || [];
       if (movies.length === 0) {
         moviesGrid.innerHTML = '<div class="error">Нет избранных фильмов</div>';
@@ -184,20 +196,13 @@ async function loadMovies() {
         return;
       }
     } else if (searchQuery) {
-      console.log('Searching for:', searchQuery);
       const data = await searchMovies(searchQuery, currentPage);
       movies = data.Search || [];
     } else if (currentCategory === 'popular') {
-      console.log('Loading popular movies');
       movies = await fetchPopularMovies();
-      console.log('Popular movies result:', movies);
     } else if (currentCategory === 'top') {
-      console.log('Loading top movies');
       movies = await fetchTopMovies();
-      console.log('Top movies result:', movies);
     }
-
-    console.log('Final movies variable:', movies, 'Type:', typeof movies, 'Is array:', Array.isArray(movies));
 
     moviesGrid.innerHTML = '';
     
@@ -207,18 +212,14 @@ async function loadMovies() {
       return;
     }
     
-    console.log('Starting to render', movies.length, 'movies');
-    
     movies.forEach((movie, index) => {
       const card = createMovieCard(movie);
       card.style.animationDelay = `${index * 0.05}s`;
       moviesGrid.appendChild(card);
     });
 
-    console.log('Rendering complete');
-
   } catch (error) {
-    console.error('Error in loadMovies:', error);
+    console.error('Error:', error);
     moviesGrid.innerHTML = '<div class="error">Произошла ошибка: ' + error.message + '</div>';
   }
   

@@ -20,19 +20,8 @@
 
     <div class="controls">
       <input type="text" class="search-input" placeholder="Поиск фильмов..." id="searchInput">
-      <button class="btn active" id="btnPopular">Популярные</button>
-      <button class="btn" id="btnTop">Топ</button>
+      <button class="btn active" id="btnArchive">Архив</button>
       <button class="btn" id="btnFavorites">Избранное</button>
-    </div>
-
-    <div class="progress-container" id="progressContainer">
-      <div class="progress-info">
-        <span class="progress-text" id="progressText">Загрузка фильмов</span>
-        <span class="progress-percent" id="progressPercent">0%</span>
-      </div>
-      <div class="progress-bar">
-        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
-      </div>
     </div>
 
     <div class="filters-panel" id="filtersPanel">
@@ -131,6 +120,16 @@
             <option value="96">96</option>
           </select>
         </div>
+      </div>
+    </div>
+
+    <div class="progress-container" id="progressContainer">
+      <div class="progress-info">
+        <span class="progress-text" id="progressText">Загрузка фильмов</span>
+        <span class="progress-percent" id="progressPercent">0%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
       </div>
     </div>
 

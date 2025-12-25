@@ -2,25 +2,17 @@ const OMDb_API_KEY = 'b9a5e69d';
 const OMDb_BASE_URL = 'https://www.omdbapi.com';
 
 let currentPage = 1;
-let currentCategory = 'popular';
+let currentCategory = 'archive';
 let searchQuery = '';
 let isLoading = false;
 let allMovies = [];
 let filteredMovies = [];
 let itemsPerPage = 24;
 let currentDisplayPage = 1;
-let allGenres = [
-  'Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime', 'Documentary',
-  'Drama', 'Family', 'Fantasy', 'Film-Noir', 'Game-Show', 'History', 'Horror',
-  'Music', 'Musical', 'Mystery', 'News', 'Reality-TV', 'Romance', 'Sci-Fi',
-  'Sport', 'Talk-Show', 'Thriller', 'War', 'Western'
-];
-let currentGenreIndex = 0;
 
 const moviesGrid = document.getElementById('moviesGrid');
 const searchInput = document.getElementById('searchInput');
-const btnPopular = document.getElementById('btnPopular');
-const btnTop = document.getElementById('btnTop');
+const btnArchive = document.getElementById('btnArchive');
 const btnFavorites = document.getElementById('btnFavorites');
 const btnResetFilters = document.getElementById('btnResetFilters');
 const btnLoadMore = document.getElementById('btnLoadMore');
@@ -82,7 +74,7 @@ async function fetchMoviesByGenre(genre, page = 1) {
   
   for (const word of commonWords) {
     try {
-      const url = `${OMDb_BASE_URL}/?s=${encodeURIComponent(word)}&type=movie&page=${page}&apikey=${OMDb_API_KEY}`;
+      const url = `${OMDb_BASE_URL}/?s=${encodeURIComponent(word)}&apikey=${OMDb_API_KEY}`;
       const response = await fetchWithTimeout(url);
       const data = await response.json();
       
@@ -114,32 +106,20 @@ async function fetchMovieDetails(imdbID) {
   }
 }
 
-async function fetchComprehensiveMovies() {
-  const movies = [];
-  const batchSize = 3;
-  
-  for (let i = 0; i < allGenres.length; i += batchSize) {
-    const genresBatch = allGenres.slice(i, i + batchSize);
-    
-    const genreMovies = await Promise.all(
-      genresBatch.map(genre => fetchMoviesByGenre(genre))
-    );
-    
-    movies.push(...genreMovies.flat());
-  }
-  
-  return [...new Map(movies.map(m => [m.imdbID, m])).values()];
-}
-
 async function fetchPopularMovies() {
-  currentGenreIndex = 0;
-  const popularGenres = ['Action', 'Drama', 'Comedy', 'Thriller', 'Horror'];
-  const movies = await fetchComprehensiveMovies();
-  const filteredMovies = movies.filter(m => {
-    if (!m.Genre) return false;
-    return popularGenres.some(g => m.Genre.toLowerCase().includes(g.toLowerCase()));
-  });
-  return filteredMovies;
+  const searchKeywords = [
+    'avengers', 'star', 'war', 'love', 'dark', 'action', 'drama', 'thriller', 
+    'comedy', 'horror', 'breaking', 'game', 'walking', 'friends', 'office',
+    'adventure', 'fantasy', 'scifi', 'crime', 'mystery', 'romance', 
+    'western', 'documentary', 'animation', 'family', 'biography', 'history', 
+    'music', 'sport', 'musical', 'news'
+  ];
+  
+  const movies = await fetchMoviesByKeywords(searchKeywords);
+  const detailsMovies = await Promise.all(
+    movies.slice(0, 150).map(m => fetchMovieDetails(m.imdbID))
+  );
+  return detailsMovies.filter(m => m !== null);
 }
 
 async function fetchTopMovies() {
@@ -157,50 +137,43 @@ async function fetchTopMovies() {
 }
 
 async function loadMoreMovies() {
-  if (isLoading || currentGenreIndex >= allGenres.length) return;
+  if (isLoading) return;
   
-  progressContainer.classList.remove('hidden');
   btnLoadMore.disabled = true;
   btnLoadMore.textContent = 'Загрузка...';
   isLoading = true;
 
   try {
-    const nextGenres = allGenres.slice(currentGenreIndex, currentGenreIndex + 2);
+    const moreKeywords = ['movie', 'film', 'cinema', 'picture', 'show'];
+    const newMovies = await fetchMoviesByKeywords(moreKeywords);
     
-    const newMovies = await Promise.all(
-      nextGenres.map(genre => fetchMoviesByGenre(genre))
+    const detailsNewMovies = await Promise.all(
+      newMovies.slice(0, 50).map(m => fetchMovieDetails(m.imdbID))
     );
     
-    const flatMovies = newMovies.flat();
-    currentGenreIndex += 2;
+    const validMovies = detailsNewMovies.filter(m => m !== null);
     
-    if (flatMovies.length > 0) {
+    if (validMovies.length > 0) {
       const newIds = new Set(allMovies.map(m => m.imdbID));
-      const uniqueNewMovies = flatMovies.filter(m => m && !newIds.has(m.imdbID));
+      const uniqueNewMovies = validMovies.filter(m => !newIds.has(m.imdbID));
       
       allMovies = [...allMovies, ...uniqueNewMovies];
       populateFilters(allMovies);
       applyFilters();
     }
     
-    if (currentGenreIndex >= allGenres.length) {
-      btnLoadMore.textContent = 'Все жанры загружены';
-      btnLoadMore.disabled = true;
-    } else {
-      btnLoadMore.textContent = `Загрузить ещё (жанры: ${currentGenreIndex}/${allGenres.length})`;
-      btnLoadMore.disabled = false;
-    }
+    btnLoadMore.textContent = 'Загрузить ещё';
+    btnLoadMore.disabled = false;
   } catch (error) {
     console.error('Error loading more movies:', error);
     btnLoadMore.textContent = 'Ошибка загрузки';
     btnLoadMore.disabled = false;
   }
   
-  hideProgressBar();
   isLoading = false;
 }
 
-function updateLoadingProgress(genre, current, total) {
+function updateLoadingProgress(current, total) {
   if (searchQuery || currentCategory === 'favorites') {
     progressContainer.classList.add('hidden');
     return;
@@ -209,7 +182,7 @@ function updateLoadingProgress(genre, current, total) {
   progressContainer.classList.remove('hidden');
   const percentage = Math.round((current / total) * 100);
   
-  progressText.textContent = `Загрузка ${genre}...`;
+  progressText.textContent = `Загрузка...`;
   progressPercent.textContent = `${percentage}%`;
   progressFill.style.width = `${percentage}%`;
 }
@@ -370,8 +343,9 @@ function applyFilters() {
   }
 
   if (filterType.value) {
+    const typeLower = filterType.value.toLowerCase();
     filteredMovies = filteredMovies.filter(m => 
-      m.Type === filterType.value
+      m.Type && m.Type.toLowerCase() === typeLower
     );
   }
 
@@ -535,7 +509,7 @@ async function loadMovies() {
   
   if (!searchQuery && currentCategory !== 'favorites') {
     progressContainer.classList.remove('hidden');
-    progressText.textContent = 'Подготовка к загрузке...';
+    progressText.textContent = 'Загрузка фильмов...';
     progressPercent.textContent = '0%';
     progressFill.style.width = '0%';
   }
@@ -551,23 +525,23 @@ async function loadMovies() {
         return;
       }
     } else if (searchQuery) {
+      updateLoadingProgress(0, 100);
       const data = await searchMovies(searchQuery, currentPage);
       movies = data.Search || [];
-    } else if (currentCategory === 'popular') {
+      hideProgressBar();
+    } else if (currentCategory === 'archive') {
+      updateLoadingProgress(0, 100);
       movies = await fetchPopularMovies();
-    } else if (currentCategory === 'top') {
-      movies = await fetchTopMovies();
+      updateLoadingProgress(100, 100);
+      hideProgressBar();
     }
 
     allMovies = movies;
     populateFilters(allMovies);
     applyFilters();
-    hideProgressBar();
 
     if (currentCategory !== 'favorites' && !searchQuery) {
       loadMoreContainer.style.display = 'block';
-      btnLoadMore.textContent = `Загрузить ещё (жанры: ${currentGenreIndex}/${allGenres.length})`;
-      btnLoadMore.disabled = false;
     }
 
   } catch (error) {
@@ -580,7 +554,7 @@ async function loadMovies() {
 }
 
 function setActiveButton(activeBtn) {
-  [btnPopular, btnTop, btnFavorites].forEach(btn => btn.classList.remove('active'));
+  [btnArchive, btnFavorites].forEach(btn => btn.classList.remove('active'));
   activeBtn.classList.add('active');
 }
 
@@ -596,23 +570,12 @@ function resetFilters() {
   applyFilters();
 }
 
-btnPopular.addEventListener('click', () => {
-  currentCategory = 'popular';
+btnArchive.addEventListener('click', () => {
+  currentCategory = 'archive';
   searchQuery = '';
   searchInput.value = '';
   currentPage = 1;
-  currentGenreIndex = 0;
-  setActiveButton(btnPopular);
-  loadMovies();
-});
-
-btnTop.addEventListener('click', () => {
-  currentCategory = 'top';
-  searchQuery = '';
-  searchInput.value = '';
-  currentPage = 1;
-  currentGenreIndex = 0;
-  setActiveButton(btnTop);
+  setActiveButton(btnArchive);
   loadMovies();
 });
 
@@ -646,7 +609,7 @@ searchInput.addEventListener('input', (e) => {
   
   searchTimeout = setTimeout(() => {
     if (searchQuery.length > 2 || searchQuery.length === 0) {
-      [btnPopular, btnTop, btnFavorites].forEach(btn => btn.classList.remove('active'));
+      [btnArchive, btnFavorites].forEach(btn => btn.classList.remove('active'));
       currentPage = 1;
       loadMovies();
     }

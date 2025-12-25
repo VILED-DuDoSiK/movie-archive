@@ -75,6 +75,9 @@
   padding: 60px;
   color: #ff6b6b;
   font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .pagination {

@@ -465,6 +465,18 @@ h1 {
   cursor: not-allowed;
 }
 
+.load-status {
+  color: var(--accent-gold);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-align: center;
+  padding: 10px 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
 .load-more-container {
   text-align: center;
   margin: 40px 0;

@@ -9,7 +9,6 @@ let allMovies = [];
 let filteredMovies = [];
 let itemsPerPage = 24;
 let currentDisplayPage = 1;
-let autoLoadIndex = 0;
 let isAutoLoading = false;
 
 const moviesGrid = document.getElementById('moviesGrid');
@@ -30,7 +29,7 @@ const filterYearTo = document.getElementById('filterYearTo');
 const filterType = document.getElementById('filterType');
 const filterRatingFrom = document.getElementById('filterRatingFrom');
 const filterRatingTo = document.getElementById('filterRatingTo');
-const filterSort = document.getElementById('filterSort');
+const loadStatus = document.getElementById('loadStatus');
 
 async function loadMoviesFromJSON() {
   try {
@@ -152,18 +151,19 @@ async function fetchTopMovies() {
 }
 
 async function loadMoreMovies() {
-  if (isLoading || isAutoLoading) return;
+  if (isLoading) return;
   
   isAutoLoading = true;
   btnLoadMore.disabled = true;
   btnLoadMore.textContent = 'Подгрузка...';
   isLoading = true;
+  updateLoadStatus();
 
   try {
-    const moreKeywords = ['cinema', 'show', 'film', 'picture', 'motion', 'drama', 'comedy'];
+    const moreKeywords = ['cinema', 'show', 'film', 'picture', 'motion', 'drama', 'comedy', 'action', 'thriller', 'horror', 'family', 'fantasy', 'scifi', 'romance', 'crime', 'western'];
     const newMovies = await fetchMoviesByKeywords(moreKeywords);
     
-    const imdbIDs = newMovies.slice(0, 50).map(m => m.imdbID);
+    const imdbIDs = newMovies.slice(0, 100).map(m => m.imdbID);
     const details = await Promise.all(
       imdbIDs.map(id => fetchMovieDetails(id))
     );
@@ -177,9 +177,29 @@ async function loadMoreMovies() {
       allMovies = [...allMovies, ...uniqueNewMovies];
       populateFilters(allMovies);
       applyFilters();
-      
-      updateResultsInfo(filteredMovies.length);
+      updateLoadStatus();
     }
+    
+    btnLoadMore.textContent = 'Подгрузить ещё';
+    btnLoadMore.disabled = false;
+  } catch (error) {
+    console.error('Error loading more movies:', error);
+    btnLoadMore.textContent = 'Ошибка';
+    btnLoadMore.disabled = false;
+  }
+  
+  isLoading = false;
+  isAutoLoading = false;
+}
+
+function updateLoadStatus() {
+  if (searchQuery || currentCategory === 'favorites') {
+    loadStatus.textContent = '';
+    return;
+  }
+  
+  loadStatus.textContent = `Загружено: ${allMovies.length} фильмов`;
+}
     
     btnLoadMore.textContent = 'Подгрузить ещё';
     btnLoadMore.disabled = false;
@@ -551,24 +571,40 @@ async function loadMovies() {
     } else if (searchQuery) {
       const data = await searchMovies(searchQuery, currentPage);
       movies = data.Search || [];
+      stopAutoLoad();
     } else if (currentCategory === 'archive') {
-      movies = await fetchPopularMovies();
+      // Загружаем начальную партию фильмов
+      updateLoadStatus();
+      const data = await searchMovies('', 1);
+      const firstBatch = data.Search ? data.Search.slice(0, 100) : [];
+      
+      // Загружаем детали для первой партии
+      const imdbIDs = firstBatch.map(m => m.imdbID);
+      const details = await Promise.all(
+        imdbIDs.map(id => fetchMovieDetails(id))
+      );
+      
+      const validMovies = details.filter(m => m !== null);
+      allMovies = validMovies;
+      movies = validMovies;
+      
+      updateLoadStatus();
     }
 
     allMovies = movies;
     populateFilters(allMovies);
     applyFilters();
 
-    if (currentCategory !== 'favorites' && !searchQuery) {
+    if (currentCategory === 'archive' && !searchQuery) {
       loadMoreContainer.style.display = 'block';
-      
-      // Автоматическая подгрузка фильмов каждые 2 секунды
+      // Начинаем непрерывную авто-подгрузку
       startAutoLoad();
     }
 
   } catch (error) {
     console.error('Error:', error);
     moviesGrid.innerHTML = '<div class="error">Произошла ошибка: ' + error.message + '</div>';
+    stopAutoLoad();
   }
   
   isLoading = false;
@@ -579,17 +615,24 @@ function startAutoLoad() {
     return;
   }
   
-  // Подгружаем больше фильмов каждые 2 секунды
+  if (allMovies.length >= 10000) {
+    console.log('Достигнут лимит в 10000 фильмов');
+    return;
+  }
+  
+  loadMoreMovies();
+  
+  // Продолжаем подгрузку каждые 1 секунду, пока не достигнут лимит
   setTimeout(() => {
-    if (!isAutoLoading && !searchQuery && currentCategory === 'archive') {
-      loadMoreMovies();
+    if (!searchQuery && currentCategory === 'archive' && allMovies.length < 10000) {
       startAutoLoad();
     }
-  }, 2000);
+  }, 1000);
 }
 
 function stopAutoLoad() {
-  isAutoLoading = false;
+  // Оставляем авто-подгрузку, но не сбрасываем флаг
+  // Это позволит продолжить подгрузку при следующем открытии архива
 }
 
 function setActiveButton(activeBtn) {

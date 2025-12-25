@@ -26,12 +26,10 @@ async function fetchWithTimeout(url, timeout = 10000) {
   }
 }
 
-async function fetchPopularMovies() {
+async function fetchMoviesByKeywords(keywords) {
   const movies = [];
   
-  const queries = ['avengers', 'star', 'war', 'love', 'dark'];
-  
-  for (const keyword of queries) {
+  for (const keyword of keywords) {
     try {
       console.log(`Fetching: ${keyword}`);
       const url = `${OMDb_BASE_URL}/?s=${keyword}&type=movie&page=1&apikey=${OMDb_API_KEY}`;
@@ -40,7 +38,7 @@ async function fetchPopularMovies() {
       
       console.log('Response for', keyword, ':', data);
       
-      if (data.Search) {
+      if (data && data.Search && Array.isArray(data.Search)) {
         movies.push(...data.Search);
       }
     } catch (e) {
@@ -51,28 +49,14 @@ async function fetchPopularMovies() {
   return [...new Map(movies.map(m => [m.imdbID, m])).values()];
 }
 
+async function fetchPopularMovies() {
+  const queries = ['avengers', 'star', 'war', 'love', 'dark'];
+  return await fetchMoviesByKeywords(queries);
+}
+
 async function fetchTopMovies() {
-  const movies = [];
   const queries = ['godfather', 'shawshank', 'inception', 'matrix'];
-  
-  for (const keyword of queries) {
-    try {
-      console.log(`Fetching top: ${keyword}`);
-      const url = `${OMDb_BASE_URL}/?s=${keyword}&type=movie&page=1&apikey=${OMDb_API_KEY}`;
-      const response = await fetchWithTimeout(url);
-      const data = await response.json();
-      
-      console.log('Response for', keyword, ':', data);
-      
-      if (data.Search) {
-        movies.push(...data.Search);
-      }
-    } catch (e) {
-      console.error(`Error fetching ${keyword}:`, e);
-    }
-  }
-  
-  return [...new Map(movies.map(m => [m.imdbID, m])).values()];
+  return await fetchMoviesByKeywords(queries);
 }
 
 async function searchMovies(query, page = 1) {
@@ -84,7 +68,7 @@ async function searchMovies(query, page = 1) {
   
   console.log('Search response:', data);
   
-  if (data.Response === 'False') return { Search: [] };
+  if (data.Response === 'False' || !data.Search) return { Search: [] };
   return data;
 }
 
@@ -179,7 +163,7 @@ async function loadMovies() {
     let movies = [];
     
     if (currentCategory === 'favorites') {
-      movies = getFavorites();
+      movies = getFavorites() || [];
       if (movies.length === 0) {
         moviesGrid.innerHTML = '<div class="error">Нет избранных фильмов</div>';
         isLoading = false;
@@ -190,15 +174,15 @@ async function loadMovies() {
       movies = data.Search || [];
     } else if (currentCategory === 'popular') {
       movies = await fetchPopularMovies();
-    } else {
+    } else if (currentCategory === 'top') {
       movies = await fetchTopMovies();
     }
 
-    console.log('Movies loaded:', movies.length);
+    console.log('Movies loaded:', movies.length, movies);
 
     moviesGrid.innerHTML = '';
     
-    if (movies.length === 0) {
+    if (!movies || movies.length === 0) {
       moviesGrid.innerHTML = '<div class="error">Фильмы не найдены</div>';
       isLoading = false;
       return;

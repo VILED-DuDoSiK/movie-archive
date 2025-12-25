@@ -1,6 +1,5 @@
 const OMDb_API_KEY = 'b9a5e69d';
 const OMDb_BASE_URL = 'https://www.omdbapi.com';
-const MOVIES_JSON_URL = 'movies.json';
 
 let currentPage = 1;
 let currentCategory = 'archive';
@@ -10,6 +9,8 @@ let allMovies = [];
 let filteredMovies = [];
 let itemsPerPage = 24;
 let currentDisplayPage = 1;
+let autoLoadIndex = 0;
+let isAutoLoading = false;
 
 const moviesGrid = document.getElementById('moviesGrid');
 const searchInput = document.getElementById('searchInput');
@@ -21,10 +22,6 @@ const loadMoreContainer = document.getElementById('loadMoreContainer');
 const resultsInfo = document.getElementById('resultsInfo');
 const pagination = document.getElementById('pagination');
 const itemsPerPageSelect = document.getElementById('itemsPerPage');
-const progressContainer = document.getElementById('progressContainer');
-const progressText = document.getElementById('progressText');
-const progressPercent = document.getElementById('progressPercent');
-const progressFill = document.getElementById('progressFill');
 
 const filterGenre = document.getElementById('filterGenre');
 const filterCountry = document.getElementById('filterCountry');
@@ -155,21 +152,23 @@ async function fetchTopMovies() {
 }
 
 async function loadMoreMovies() {
-  if (isLoading) return;
+  if (isLoading || isAutoLoading) return;
   
+  isAutoLoading = true;
   btnLoadMore.disabled = true;
-  btnLoadMore.textContent = 'Загрузка...';
+  btnLoadMore.textContent = 'Подгрузка...';
   isLoading = true;
 
   try {
-    const moreKeywords = ['movie', 'film', 'cinema', 'picture', 'show'];
+    const moreKeywords = ['cinema', 'show', 'film', 'picture', 'motion', 'drama', 'comedy'];
     const newMovies = await fetchMoviesByKeywords(moreKeywords);
     
-    const detailsNewMovies = await Promise.all(
-      newMovies.slice(0, 50).map(m => fetchMovieDetails(m.imdbID))
+    const imdbIDs = newMovies.slice(0, 50).map(m => m.imdbID);
+    const details = await Promise.all(
+      imdbIDs.map(id => fetchMovieDetails(id))
     );
     
-    const validMovies = detailsNewMovies.filter(m => m !== null);
+    const validMovies = details.filter(m => m !== null);
     
     if (validMovies.length > 0) {
       const newIds = new Set(allMovies.map(m => m.imdbID));
@@ -178,7 +177,21 @@ async function loadMoreMovies() {
       allMovies = [...allMovies, ...uniqueNewMovies];
       populateFilters(allMovies);
       applyFilters();
+      
+      updateResultsInfo(filteredMovies.length);
     }
+    
+    btnLoadMore.textContent = 'Подгрузить ещё';
+    btnLoadMore.disabled = false;
+  } catch (error) {
+    console.error('Error loading more movies:', error);
+    btnLoadMore.textContent = 'Ошибка';
+    btnLoadMore.disabled = false;
+  }
+  
+  isLoading = false;
+  isAutoLoading = false;
+}
     
     btnLoadMore.textContent = 'Загрузить ещё';
     btnLoadMore.disabled = false;
@@ -524,13 +537,6 @@ async function loadMovies() {
   moviesGrid.innerHTML = '<div class="loading">Загрузка</div>';
   pagination.innerHTML = '';
   loadMoreContainer.style.display = 'none';
-  
-  if (!searchQuery && currentCategory !== 'favorites') {
-    progressContainer.classList.remove('hidden');
-    progressText.textContent = 'Загрузка фильмов...';
-    progressPercent.textContent = '0%';
-    progressFill.style.width = '0%';
-  }
 
   try {
     let movies;
@@ -543,27 +549,10 @@ async function loadMovies() {
         return;
       }
     } else if (searchQuery) {
-      updateLoadingProgress(50, 100);
       const data = await searchMovies(searchQuery, currentPage);
       movies = data.Search || [];
-      updateLoadingProgress(100, 100);
-      hideProgressBar();
     } else if (currentCategory === 'archive') {
-      // Пытаемся загрузить из movies.json
-      updateLoadingProgress(10, 100);
-      const moviesFromJSON = await loadMoviesFromJSON();
-      
-      if (moviesFromJSON && moviesFromJSON.length > 0) {
-        updateLoadingProgress(100, 100);
-        movies = moviesFromJSON;
-        console.log(`Используем локальный архив: ${movies.length} фильмов`);
-      } else {
-        // Если JSON пуст или недоступен, загружаем из API
-        updateLoadingProgress(20, 100);
-        console.log('JSON не найден или пуст, загружаем из API...');
-        movies = await fetchPopularMovies();
-      }
-      hideProgressBar();
+      movies = await fetchPopularMovies();
     }
 
     allMovies = movies;
@@ -572,15 +561,35 @@ async function loadMovies() {
 
     if (currentCategory !== 'favorites' && !searchQuery) {
       loadMoreContainer.style.display = 'block';
+      
+      // Автоматическая подгрузка фильмов каждые 2 секунды
+      startAutoLoad();
     }
 
   } catch (error) {
     console.error('Error:', error);
     moviesGrid.innerHTML = '<div class="error">Произошла ошибка: ' + error.message + '</div>';
-    hideProgressBar();
   }
   
   isLoading = false;
+}
+
+function startAutoLoad() {
+  if (isAutoLoading || searchQuery || currentCategory === 'favorites') {
+    return;
+  }
+  
+  // Подгружаем больше фильмов каждые 2 секунды
+  setTimeout(() => {
+    if (!isAutoLoading && !searchQuery && currentCategory === 'archive') {
+      loadMoreMovies();
+      startAutoLoad();
+    }
+  }, 2000);
+}
+
+function stopAutoLoad() {
+  isAutoLoading = false;
 }
 
 function setActiveButton(activeBtn) {
@@ -606,6 +615,7 @@ btnArchive.addEventListener('click', () => {
   searchInput.value = '';
   currentPage = 1;
   setActiveButton(btnArchive);
+  stopAutoLoad();
   loadMovies();
 });
 
@@ -614,6 +624,7 @@ btnFavorites.addEventListener('click', () => {
   searchQuery = '';
   searchInput.value = '';
   currentPage = 1;
+  stopAutoLoad();
   setActiveButton(btnFavorites);
   loadMovies();
 });
@@ -622,12 +633,16 @@ btnResetFilters.addEventListener('click', resetFilters);
 btnLoadMore.addEventListener('click', loadMoreMovies);
 
 [filterGenre, filterCountry, filterYearFrom, filterYearTo, filterType, filterRatingFrom, filterRatingTo, filterSort].forEach(filter => {
-  filter.addEventListener('change', applyFilters);
+  filter.addEventListener('change', () => {
+    stopAutoLoad();
+    applyFilters();
+  });
 });
 
 itemsPerPageSelect.addEventListener('change', (e) => {
   itemsPerPage = parseInt(e.target.value);
   currentDisplayPage = 1;
+  stopAutoLoad();
   renderMovies();
   renderPagination();
 });
@@ -639,6 +654,7 @@ searchInput.addEventListener('input', (e) => {
   
   searchTimeout = setTimeout(() => {
     if (searchQuery.length > 2 || searchQuery.length === 0) {
+      stopAutoLoad();
       [btnArchive, btnFavorites].forEach(btn => btn.classList.remove('active'));
       currentPage = 1;
       loadMovies();
